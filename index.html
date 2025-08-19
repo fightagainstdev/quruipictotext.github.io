@@ -1,0 +1,144 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Story Generator</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-storage.js"></script>
+    <!-- TensorFlow.js for object detection -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@latest"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- 侧边栏 -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>Photo Story</h2>
+            </div>
+            <ul>
+                <li><button onclick="showSection('main-section')">上传故事</button></li>
+                <li><button onclick="showSection('public-square')">广场</button></li>
+                <li><button onclick="showSection('tag-square')">标签广场</button></li>
+                <li><button onclick="showSection('archive')">我的存档</button></li>
+                <li><button onclick="showSection('search-section')">搜索</button></li>
+                <li><button onclick="showSection('profile-section')">我的资料</button></li>
+                <li><button onclick="logout()">登出</button></li>
+            </ul>
+        </nav>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 登录/注册 -->
+            <div id="auth-section" class="section">
+                <div class="card">
+                    <h1>登录/注册</h1>
+                    <input type="email" id="email" placeholder="邮箱">
+                    <input type="password" id="password" placeholder="密码">
+                    <div class="button-group">
+                        <button onclick="register()">注册</button>
+                        <button onclick="login()">登录</button>
+                    </div>
+                    <a href="#" onclick="resetPassword()">忘记密码？</a>
+                </div>
+            </div>
+
+            <!-- 上传故事 -->
+            <div id="main-section" class="section" style="display: none;">
+                <div class="card">
+                    <h1>上传照片生成故事</h1>
+                    <input type="file" id="photo-upload" accept="image/*">
+                    <select id="privacy">
+                        <option value="public">公开</option>
+                        <option value="private">私密</option>
+                    </select>
+                    <button onclick="uploadAndGenerate()">上传并生成</button>
+                    <div id="story-output" class="story-output"></div>
+                </div>
+            </div>
+
+            <!-- 广场 -->
+            <div id="public-square" class="section" style="display: none;"></div>
+
+            <!-- 标签广场 -->
+            <div id="tag-square" class="section" style="display: none;"></div>
+
+            <!-- 存档 -->
+            <div id="archive" class="section" style="display: none;"></div>
+
+            <!-- 搜索 -->
+            <div id="search-section" class="section" style="display: none;">
+                <div class="card">
+                    <h1>搜索故事</h1>
+                    <div class="search-bar">
+                        <input type="text" id="search-keyword" placeholder="输入关键字...">
+                        <button onclick="searchStories()">搜索</button>
+                    </div>
+                    <div id="search-results"></div>
+                </div>
+            </div>
+
+            <!-- 用户资料 -->
+            <div id="profile-section" class="section" style="display: none;">
+                <div class="card">
+                    <h1>我的资料</h1>
+                    <div class="profile-info">
+                        <img id="avatar-preview" src="default-avatar.png" alt="Avatar" class="avatar">
+                        <p id="username-display">加载中...</p>
+                    </div>
+                    <input type="text" id="username-input" placeholder="输入昵称">
+                    <input type="file" id="avatar-upload" accept="image/*">
+                    <button onclick="updateProfile()">更新资料</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
